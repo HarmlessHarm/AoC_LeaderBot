@@ -21,15 +21,20 @@ class MessageFormatter:
     """Formats leaderboard changes into Telegram messages."""
 
     @staticmethod
-    def format_changes(changes: LeaderboardChanges) -> List[str]:
+    def format_changes(
+        changes: LeaderboardChanges, user_links: Dict[str, str] = None
+    ) -> List[str]:
         """Format all changes into one or more Telegram messages.
 
         Args:
             changes: LeaderboardChanges with all detected changes.
+            user_links: Optional dict mapping member names to user IDs for mentions.
 
         Returns:
             List of formatted message strings.
         """
+        if user_links is None:
+            user_links = {}
         if not changes.has_changes:
             return []
 
@@ -45,7 +50,7 @@ class MessageFormatter:
             lines.append("⭐ New Stars:")
             for event in changes.new_stars:
                 lines.append(
-                    MessageFormatter._format_new_star(event)
+                    MessageFormatter._format_new_star(event, user_links)
                 )
             lines.append("")
 
@@ -54,7 +59,7 @@ class MessageFormatter:
             lines.append("📈 Rank Changes:")
             for event in changes.rank_changes:
                 lines.append(
-                    MessageFormatter._format_rank_change(event)
+                    MessageFormatter._format_rank_change(event, user_links)
                 )
             lines.append("")
 
@@ -68,7 +73,7 @@ class MessageFormatter:
             lines.append("💰 Score Changes:")
             for event in score_changes:
                 lines.append(
-                    MessageFormatter._format_score_change(event)
+                    MessageFormatter._format_score_change(event, user_links)
                 )
             lines.append("")
 
@@ -91,16 +96,48 @@ class MessageFormatter:
         return messages
 
     @staticmethod
-    def _format_new_star(event: NewStarEvent) -> str:
-        """Format a single new star event."""
-        if event.is_day_completion and event.part == 2:
-            return f"  🌟 {event.member_name} - Day {event.day} (Complete!)"
-        else:
-            return f"  ⭐ {event.member_name} - Day {event.day} Part {event.part}"
+    def _format_member_name(member_name: str, user_links: Dict[str, str]) -> str:
+        """Format a member name with mention if user is linked.
+
+        Args:
+            member_name: The member's name.
+            user_links: Dict mapping member names to user IDs.
+
+        Returns:
+            Member name, potentially with mention.
+        """
+        if member_name in user_links:
+            user_id = user_links[member_name]
+            return f"{member_name} (<a href='tg://user?id={user_id}'>@{member_name}</a>)"
+        return member_name
 
     @staticmethod
-    def _format_rank_change(event: RankChangeEvent) -> str:
+    def _format_new_star(event: NewStarEvent, user_links: Dict[str, str] = None) -> str:
+        """Format a single new star event."""
+        if user_links is None:
+            user_links = {}
+
+        member_display = MessageFormatter._format_member_name(
+            event.member_name, user_links
+        )
+
+        if event.is_day_completion and event.part == 2:
+            return f"  🌟 {member_display} - Day {event.day} (Complete!)"
+        else:
+            return f"  ⭐ {member_display} - Day {event.day} Part {event.part}"
+
+    @staticmethod
+    def _format_rank_change(
+        event: RankChangeEvent, user_links: Dict[str, str] = None
+    ) -> str:
         """Format a rank change event."""
+        if user_links is None:
+            user_links = {}
+
+        member_display = MessageFormatter._format_member_name(
+            event.member_name, user_links
+        )
+
         delta = event.rank_delta
         if delta < 0:
             # Moved up
@@ -109,16 +146,25 @@ class MessageFormatter:
             # Moved down
             arrow = f"↓ {abs(delta)}"
 
-        return f"  {event.member_name}: #{event.old_rank} → #{event.new_rank} ({arrow})"
+        return f"  {member_display}: #{event.old_rank} → #{event.new_rank} ({arrow})"
 
     @staticmethod
-    def _format_score_change(event: ScoreChangeEvent) -> str:
+    def _format_score_change(
+        event: ScoreChangeEvent, user_links: Dict[str, str] = None
+    ) -> str:
         """Format a score change event."""
+        if user_links is None:
+            user_links = {}
+
+        member_display = MessageFormatter._format_member_name(
+            event.member_name, user_links
+        )
+
         delta = event.score_delta
         if delta > 0:
-            return f"  {event.member_name}: {event.old_score} → {event.new_score} (+{delta})"
+            return f"  {member_display}: {event.old_score} → {event.new_score} (+{delta})"
         else:
-            return f"  {event.member_name}: {event.old_score} → {event.new_score} ({delta})"
+            return f"  {member_display}: {event.old_score} → {event.new_score} ({delta})"
 
     @staticmethod
     def _split_long_message(message: str) -> List[str]:

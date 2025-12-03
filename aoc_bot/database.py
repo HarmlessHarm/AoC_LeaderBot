@@ -67,8 +67,20 @@ class DatabaseManager:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS user_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            username TEXT,
+            member_name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(chat_id, user_id),
+            FOREIGN KEY(chat_id) REFERENCES chat_configs(chat_id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_chat_id ON chat_configs(chat_id);
         CREATE INDEX IF NOT EXISTS idx_enabled ON chat_configs(enabled);
+        CREATE INDEX IF NOT EXISTS idx_user_links_chat ON user_links(chat_id);
         """
 
         try:
@@ -319,6 +331,95 @@ class DatabaseManager:
             )
         except Exception as e:
             logger.error(f"Failed to enable config: {e}")
+            raise
+
+    async def add_user_link(
+        self, chat_id: str, user_id: str, member_name: str
+    ) -> None:
+        """Link a Telegram user to a leaderboard member.
+
+        Args:
+            chat_id: Telegram chat ID.
+            user_id: Telegram user ID.
+            member_name: Leaderboard member name to link to.
+        """
+        try:
+            await self.conn.execute(
+                """INSERT OR REPLACE INTO user_links (chat_id, user_id, member_name)
+                   VALUES (?, ?, ?)""",
+                (chat_id, user_id, member_name),
+            )
+            await self.conn.commit()
+            logger.info(
+                f"Linked user {user_id} to member '{member_name}' in chat {chat_id}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to add user link: {e}")
+            raise
+
+    async def remove_user_link(self, chat_id: str, user_id: str) -> None:
+        """Remove a user link.
+
+        Args:
+            chat_id: Telegram chat ID.
+            user_id: Telegram user ID.
+        """
+        try:
+            cursor = await self.conn.execute(
+                "DELETE FROM user_links WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            await self.conn.commit()
+
+            if cursor.rowcount == 0:
+                logger.warning(f"User link not found for removal: {user_id}")
+            else:
+                logger.info(f"Removed user link for {user_id} in chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Failed to remove user link: {e}")
+            raise
+
+    async def get_user_link(self, chat_id: str, user_id: str) -> Optional[str]:
+        """Get a user's linked leaderboard member name.
+
+        Args:
+            chat_id: Telegram chat ID.
+            user_id: Telegram user ID.
+
+        Returns:
+            Member name if linked, None otherwise.
+        """
+        try:
+            async with self.conn.execute(
+                "SELECT member_name FROM user_links WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            ) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else None
+        except Exception as e:
+            logger.error(f"Failed to get user link: {e}")
+            raise
+
+    async def get_user_links_for_chat(
+        self, chat_id: str
+    ) -> dict[str, str]:
+        """Get all user links in a chat.
+
+        Args:
+            chat_id: Telegram chat ID.
+
+        Returns:
+            Dict mapping member names to user IDs.
+        """
+        try:
+            async with self.conn.execute(
+                "SELECT member_name, user_id FROM user_links WHERE chat_id=?",
+                (chat_id,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return {row[0]: row[1] for row in rows}
+        except Exception as e:
+            logger.error(f"Failed to get user links for chat: {e}")
             raise
 
     @staticmethod

@@ -117,7 +117,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 3️⃣ Check status (everyone):
    /status - Show monitoring status and next poll time
 
-4️⃣ Remove the leaderboard (admin only):
+4️⃣ Link your account (group chats only):
+   /link_me <member_name> - Link your Telegram account to your leaderboard name
+
+   Example: /link_me Alice
+
+   Once linked, you'll be mentioned when your name appears in leaderboard updates!
+
+5️⃣ Unlink your account (group chats only):
+   /unlink_me - Remove your account link
+
+6️⃣ Remove the leaderboard (admin only):
    /remove_leaderboard - Stop monitoring this chat's leaderboard
 
 Quick Setup:
@@ -434,6 +444,81 @@ async def rankings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("❌ Failed to fetch rankings. Try again later.")
 
 
+async def link_me_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /link_me command - link user to a leaderboard member.
+
+    Args:
+        update: Telegram update.
+        context: Command context.
+    """
+    # Only works in groups
+    if update.effective_chat.type == "private":
+        await update.message.reply_text(
+            "❌ This command only works in group chats.\n"
+            "Use this in a group where you've added the bot."
+        )
+        return
+
+    db: DatabaseManager = context.bot_data.get("database")
+    if not db:
+        await update.message.reply_text("❌ Bot not fully initialized. Try again later.")
+        return
+
+    # Parse arguments
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text(
+            "Usage: /link_me <member_name>\n\n"
+            "Example: /link_me Alice\n\n"
+            "This links your Telegram account to your leaderboard name so you get mentioned in updates!"
+        )
+        return
+
+    member_name = " ".join(context.args)  # Support names with spaces
+    chat_id = str(update.effective_chat.id)
+    user_id = str(update.effective_user.id)
+
+    try:
+        await db.add_user_link(chat_id, user_id, member_name)
+        await update.message.reply_text(
+            f"✅ Linked! You'll be mentioned when '{member_name}' appears in updates."
+        )
+    except Exception as e:
+        logger.error(f"Failed to link user: {e}")
+        await update.message.reply_text("❌ Failed to link your account. Try again later.")
+
+
+async def unlink_me_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /unlink_me command - remove user link.
+
+    Args:
+        update: Telegram update.
+        context: Command context.
+    """
+    # Only works in groups
+    if update.effective_chat.type == "private":
+        await update.message.reply_text(
+            "❌ This command only works in group chats."
+        )
+        return
+
+    db: DatabaseManager = context.bot_data.get("database")
+    if not db:
+        await update.message.reply_text("❌ Bot not fully initialized. Try again later.")
+        return
+
+    chat_id = str(update.effective_chat.id)
+    user_id = str(update.effective_user.id)
+
+    try:
+        await db.remove_user_link(chat_id, user_id)
+        await update.message.reply_text(
+            "✅ Unlinked! You won't be mentioned in leaderboard updates anymore."
+        )
+    except Exception as e:
+        logger.error(f"Failed to unlink user: {e}")
+        await update.message.reply_text("❌ Failed to unlink your account. Try again later.")
+
+
 async def register_handlers(
     application, db_manager: DatabaseManager, polling_manager: PollingManager
 ) -> None:
@@ -460,6 +545,8 @@ async def register_handlers(
     )
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("rankings", rankings_command))
+    application.add_handler(CommandHandler("link_me", link_me_command))
+    application.add_handler(CommandHandler("unlink_me", unlink_me_command))
 
     # Set up command autocomplete
     commands = [
@@ -469,6 +556,8 @@ async def register_handlers(
         BotCommand("remove_leaderboard", "Stop monitoring (admin only)"),
         BotCommand("rankings", "Show current rankings"),
         BotCommand("status", "Show monitoring status"),
+        BotCommand("link_me", "Link your account to leaderboard member"),
+        BotCommand("unlink_me", "Unlink your account"),
     ]
 
     try:

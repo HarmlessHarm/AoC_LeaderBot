@@ -204,7 +204,9 @@ class PollingManager:
                             f"Changes detected for {task_key}: "
                             f"{changes.total_changes} event(s)"
                         )
-                        messages = MessageFormatter.format_changes(changes)
+                        # Get user links for this chat to mention users in updates
+                        user_links = await self.db.get_user_links_for_chat(config.chat_id)
+                        messages = MessageFormatter.format_changes(changes, user_links)
                         await self.notifier.send_messages(config.chat_id, messages)
 
                     state_manager.save_state(current_data)

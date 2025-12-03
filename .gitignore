@@ -14,6 +14,7 @@ dist/
 
 # Project specific
 data/*.json
+data/*.db
 !data/.gitkeep
 logs/*.log
 !logs/.gitkeep
