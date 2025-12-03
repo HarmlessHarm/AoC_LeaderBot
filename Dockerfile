@@ -1,11 +1,9 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 # Install curl and build dependencies for Python packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    build-essential \
-    python3-dev \
-    && apt-get clean
+RUN apt-get update
+RUN apt-get install -y --no-install-recommends curl build-essential python3-dev
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install uv package manager
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
