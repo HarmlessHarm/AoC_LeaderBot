@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.9-slim-bullseye
 
 # Install curl and build dependencies for Python packages
 RUN apt-get update
