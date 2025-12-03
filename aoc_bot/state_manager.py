@@ -77,8 +77,20 @@ class ProcessedLeaderboard:
     def from_dict(cls, data: Dict[str, Any]) -> "ProcessedLeaderboard":
         """Create from dictionary (loaded from JSON)."""
         rankings_data = data.get("rankings", {})
-        # Convert string keys back to integers
-        rankings = {int(rank): member_ids for rank, member_ids in rankings_data.items()}
+
+        # Handle backward compatibility: old format was a list, new format is a dict
+        if isinstance(rankings_data, list):
+            # Old format: list of [member_id, rank] pairs
+            # Rebuild rankings dict from member list
+            rankings: Dict[int, List[str]] = {}
+            for member_id, rank in rankings_data:
+                if rank not in rankings:
+                    rankings[rank] = []
+                rankings[rank].append(member_id)
+        else:
+            # New format: dict with string keys (from JSON)
+            # Convert string keys back to integers
+            rankings = {int(rank): member_ids for rank, member_ids in rankings_data.items()}
 
         return cls(
             timestamp=data["timestamp"],
