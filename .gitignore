@@ -18,6 +18,7 @@ data/*.db
 !data/.gitkeep
 logs/*.log
 !logs/.gitkeep
+*.tar.gz
 
 # IDE
 .vscode/
