@@ -1,5 +1,8 @@
 FROM python:3.13-slim
 
+# Install curl and other dependencies needed for uv installation
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Install uv package manager
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.cargo/bin:$PATH"
