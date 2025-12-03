@@ -64,6 +64,26 @@ async def is_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
         return False
 
 
+def _get_commands_text() -> str:
+    """Get formatted list of available commands.
+
+    Returns:
+        Formatted commands list.
+    """
+    return """Available Commands:
+
+Admin Only:
+/set_leaderboard <id> <cookie> [year] - Set leaderboard
+/remove_leaderboard - Stop monitoring
+
+Everyone:
+/start - Welcome message
+/help - Show detailed help
+/commands - Show this list of commands
+/rankings - Show current rankings
+/status - Show monitoring status"""
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command.
 
@@ -76,7 +96,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 I monitor your private AoC leaderboards and notify you of updates!
 
 Admin Commands:
-/add_leaderboard <id> <cookie> [year] - Add/replace leaderboard
+/set_leaderboard <id> <cookie> [year] - Set leaderboard
 /remove_leaderboard - Stop monitoring
 
 Everyone Can Use:
@@ -96,20 +116,20 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         update: Telegram update.
         context: Command context.
     """
-    help_text = """How to use the bot:
+    help_text = r"""How to use the bot:
 
-1️⃣ Add a leaderboard (admin only):
-   /add_leaderboard <leaderboard_id> <session_cookie> [year]
+1️⃣ Set a leaderboard (admin only):
+   /set_leaderboard <leaderboard_id> <session_cookie> [year]
 
    Example:
-   /add_leaderboard 123456 abc123def456 2024
+   /set_leaderboard 123456 abc123def456 2024
 
    Where:
    - leaderboard_id is your AoC private leaderboard ID
    - session_cookie is your AoC session cookie (get it from browser DevTools)
    - year is optional (defaults to current year)
 
-   Note: Each chat can only have one leaderboard. Adding a new one replaces the old one.
+   Note: Each chat can only have one leaderboard. Setting a new one replaces the old one.
 
 2️⃣ View current rankings (everyone):
    /rankings - Show rankings for your chat's leaderboard
@@ -120,23 +140,37 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 4️⃣ Remove the leaderboard (admin only):
    /remove_leaderboard - Stop monitoring this chat's leaderboard
 
-Getting your session cookie:
-1. Log into adventofcode.com in your browser
-2. Open DevTools (F12)
-3. Go to Application → Cookies → adventofcode.com
-4. Copy the value of the "session" cookie
+Quick Setup:
+1. Go to your private leaderboard on adventofcode.com
+2. Note the leaderboard ID from the URL (example.com/view/12345)
+3. Open DevTools (F12)
+4. Go to Application → Cookies → adventofcode.com
+5. Find the "session" cookie and copy its value
+6. Send this command to the bot:
+   /set_leaderboard <leaderboard_id> <session_cookie>
 
-More help:
-Use /start for a quick overview"""
+   Example: /set_leaderboard 12345 abc123def456xyz789...
+
+Use /commands to see all available commands."""
 
     await update.message.reply_text(help_text)
 
 
+async def commands_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /commands command.
+
+    Args:
+        update: Telegram update.
+        context: Command context.
+    """
+    await update.message.reply_text(_get_commands_text())
+
+
 @admin_only
-async def add_leaderboard_command(
+async def set_leaderboard_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Handle /add_leaderboard command.
+    """Handle /set_leaderboard command.
 
     Args:
         update: Telegram update.
@@ -153,8 +187,8 @@ async def add_leaderboard_command(
     # Parse arguments
     if not context.args or len(context.args) < 2:
         await update.message.reply_text(
-            "Usage: /add_leaderboard <leaderboard_id> <session_cookie> [year]\n\n"
-            "Example: /add_leaderboard 123456 abc123def456 2024"
+            "Usage: /set_leaderboard <leaderboard_id> <session_cookie> [year]\n\n"
+            "Example: /set_leaderboard 123456 abc123def456 2024"
         )
         return
 
@@ -494,7 +528,8 @@ def register_handlers(
 
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("add_leaderboard", add_leaderboard_command))
+    application.add_handler(CommandHandler("commands", commands_command))
+    application.add_handler(CommandHandler("set_leaderboard", set_leaderboard_command))
     application.add_handler(
         CommandHandler("remove_leaderboard", remove_leaderboard_command)
     )
