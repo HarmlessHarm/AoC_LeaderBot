@@ -172,19 +172,33 @@ class MessageFormatter:
         # Convert to list and sort by local_score (descending)
         member_list = []
         for member_id, member_data in members.items():
-            member_list.append({
-                "name": member_data.get("name", "Anonymous"),
-                "score": member_data.get("local_score", 0),
-                "stars": member_data.get("stars", 0),
-            })
+            stars = member_data.get("stars", 0)
+            # Only include members with at least 1 star
+            if stars >= 1:
+                member_list.append({
+                    "name": member_data.get("name", "Anonymous"),
+                    "score": member_data.get("local_score", 0),
+                    "stars": stars,
+                })
+
+        if not member_list:
+            lines.append("No members have earned any stars yet.")
+            return lines
 
         member_list.sort(key=lambda m: (m["score"], m["stars"]), reverse=True)
 
-        # Format rankings
-        for rank, member in enumerate(member_list, 1):
+        # Format rankings with proper handling of tied positions
+        for i, member in enumerate(member_list):
             name = member["name"]
             score = member["score"]
             stars = member["stars"]
+
+            # Calculate rank: count how many people have strictly higher score
+            rank = 1
+            for j in range(i):
+                if member_list[j]["score"] > score:
+                    rank += 1
+
             lines.append(f"{rank}. {name}: {score} points ({stars}⭐)")
 
         # Combine lines and split if necessary

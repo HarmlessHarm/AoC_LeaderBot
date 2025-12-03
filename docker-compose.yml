@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  aoc-bot:
+    build: .
+    container_name: aoc-telegram-bot
+    restart: unless-stopped
+
+    # Load environment variables from .env file
+    env_file:
+      - .env
+
+    # Volumes for persistent data and logs
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+    # Resource limits (optional, adjust as needed)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 256M
+    #     reservations:
+    #       memory: 128M
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

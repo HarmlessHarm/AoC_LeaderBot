@@ -117,12 +117,14 @@ class ChangeDetector:
             logger.info("First run - not reporting initial state as changes")
             return changes
 
-        # Detect new members
+        # Detect new members (only report if they have at least 1 star)
         for member_id, member in new_state.members.items():
             if member_id not in old_state.members:
-                changes.new_members.append(
-                    NewMemberEvent(member_id=member_id, member_name=member.name)
-                )
+                # Only report new members who have earned at least 1 star
+                if member.stars >= 1:
+                    changes.new_members.append(
+                        NewMemberEvent(member_id=member_id, member_name=member.name)
+                    )
 
         # Detect changes for existing and returning members
         for member_id, new_member in new_state.members.items():
@@ -163,8 +165,8 @@ class ChangeDetector:
                         )
                     )
 
-            # Detect score changes
-            if new_member.local_score != old_member.local_score:
+            # Detect score changes (only for members with at least 1 star)
+            if new_member.local_score != old_member.local_score and new_member.stars >= 1:
                 changes.score_changes.append(
                     ScoreChangeEvent(
                         member_id=member_id,
@@ -174,8 +176,8 @@ class ChangeDetector:
                     )
                 )
 
-            # Detect rank changes
-            if new_member.rank != old_member.rank:
+            # Detect rank changes (only for members with at least 1 star)
+            if new_member.rank != old_member.rank and new_member.stars >= 1:
                 changes.rank_changes.append(
                     RankChangeEvent(
                         member_id=member_id,

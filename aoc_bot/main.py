@@ -79,7 +79,7 @@ async def main_async(config: BotConfig) -> None:
 
     # Register command handlers
     logger.info("Registering command handlers")
-    register_handlers(application, db_manager, polling_manager)
+    await register_handlers(application, db_manager, polling_manager)
 
     # Start both application and polling manager concurrently
     logger.info("Starting bot...")

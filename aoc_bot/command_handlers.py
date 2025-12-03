@@ -64,26 +64,6 @@ async def is_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
         return False
 
 
-def _get_commands_text() -> str:
-    """Get formatted list of available commands.
-
-    Returns:
-        Formatted commands list.
-    """
-    return """Available Commands:
-
-Admin Only:
-/set_leaderboard <id> <cookie> [year] - Set leaderboard
-/remove_leaderboard - Stop monitoring
-
-Everyone:
-/start - Welcome message
-/help - Show detailed help
-/commands - Show this list of commands
-/rankings - Show current rankings
-/status - Show monitoring status"""
-
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command.
 
@@ -149,21 +129,9 @@ Quick Setup:
 6. Send this command to the bot:
    /set_leaderboard <leaderboard_id> <session_cookie>
 
-   Example: /set_leaderboard 12345 abc123def456xyz789...
-
-Use /commands to see all available commands."""
+   Example: /set_leaderboard 12345 abc123def456xyz789..."""
 
     await update.message.reply_text(help_text)
-
-
-async def commands_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /commands command.
-
-    Args:
-        update: Telegram update.
-        context: Command context.
-    """
-    await update.message.reply_text(_get_commands_text())
 
 
 @admin_only
@@ -346,49 +314,6 @@ async def remove_leaderboard_command(
     )
 
 
-async def list_leaderboards_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Handle /list_leaderboards command.
-
-    Args:
-        update: Telegram update.
-        context: Command context.
-    """
-    # Get database from context
-    db: DatabaseManager = context.bot_data.get("database")
-
-    if not db:
-        await update.message.reply_text("❌ Bot not fully initialized. Try again later.")
-        return
-
-    chat_id = str(update.effective_chat.id)
-
-    try:
-        configs = await db.get_configs_for_chat(chat_id)
-    except Exception as e:
-        logger.error(f"Failed to get configs: {e}")
-        await update.message.reply_text("❌ Database error. Try again later.")
-        return
-
-    if not configs:
-        await update.message.reply_text(
-            "No leaderboards configured yet.\n\n"
-            "Use /add_leaderboard to add one!"
-        )
-        return
-
-    lines = ["📊 **Configured Leaderboards**\n"]
-    for config in configs:
-        status = "🟢 Active" if config.enabled else "🔴 Disabled"
-        lines.append(
-            f"{status} - ID: {config.leaderboard_id} (Year {config.year})\n"
-            f"   Poll interval: {config.poll_interval}s"
-        )
-
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
-
-
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /status command.
 
@@ -509,10 +434,10 @@ async def rankings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("❌ Failed to fetch rankings. Try again later.")
 
 
-def register_handlers(
+async def register_handlers(
     application, db_manager: DatabaseManager, polling_manager: PollingManager
 ) -> None:
-    """Register all command handlers.
+    """Register all command handlers and set up autocomplete.
 
     Args:
         application: Telegram Application.
@@ -524,19 +449,32 @@ def register_handlers(
     application.bot_data["polling_manager"] = polling_manager
 
     # Register command handlers
+    from telegram import BotCommand
     from telegram.ext import CommandHandler
 
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("commands", commands_command))
     application.add_handler(CommandHandler("set_leaderboard", set_leaderboard_command))
     application.add_handler(
         CommandHandler("remove_leaderboard", remove_leaderboard_command)
     )
-    application.add_handler(
-        CommandHandler("list_leaderboards", list_leaderboards_command)
-    )
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("rankings", rankings_command))
+
+    # Set up command autocomplete
+    commands = [
+        BotCommand("start", "Welcome message"),
+        BotCommand("help", "Show detailed help"),
+        BotCommand("set_leaderboard", "Set leaderboard (admin only)"),
+        BotCommand("remove_leaderboard", "Stop monitoring (admin only)"),
+        BotCommand("rankings", "Show current rankings"),
+        BotCommand("status", "Show monitoring status"),
+    ]
+
+    try:
+        await application.bot.set_my_commands(commands)
+        logger.info("Command autocomplete registered")
+    except Exception as e:
+        logger.warning(f"Failed to set command autocomplete: {e}")
 
     logger.info("Command handlers registered")
