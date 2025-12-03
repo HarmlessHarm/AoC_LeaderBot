@@ -174,8 +174,13 @@ class StateManager:
         member_scores.sort(key=lambda x: x[1], reverse=True)
         rankings = member_scores
 
-        # Assign rank to each member
-        for rank, (member_id, _) in enumerate(rankings, 1):
+        # Assign rank to each member with proper tie handling
+        for i, (member_id, score) in enumerate(rankings):
+            # Calculate rank: count how many people have strictly higher score
+            rank = 1
+            for j in range(i):
+                if rankings[j][1] > score:
+                    rank += 1
             members[member_id].rank = rank
 
         return ProcessedLeaderboard(
