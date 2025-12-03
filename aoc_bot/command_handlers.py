@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 
 from aoc_bot.aoc_api import AoCAPIClient, AoCAPIError
 from aoc_bot.database import DatabaseManager
+from aoc_bot.message_formatter import MessageFormatter
 from aoc_bot.polling_manager import PollingManager
 
 logger = logging.getLogger(__name__)
@@ -70,22 +71,22 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         update: Telegram update.
         context: Command context.
     """
-    welcome = """🤖 **Advent of Code Leaderboard Bot**
+    welcome = """🤖 Advent of Code Leaderboard Bot
 
 I monitor your private AoC leaderboards and notify you of updates!
 
-**Admin Commands:**
-/add_leaderboard <id> <cookie> [year] - Add a leaderboard to monitor
-/remove_leaderboard <id> [year] - Stop monitoring a leaderboard
+Admin Commands:
+/add_leaderboard <id> <cookie> [year] - Add/replace leaderboard
+/remove_leaderboard - Stop monitoring
 
-**Everyone Can Use:**
-/list_leaderboards - Show configured leaderboards
+Everyone Can Use:
+/rankings - Show current rankings
 /status - Show monitoring status
 /help - Show detailed help
 
 For more information, use /help"""
 
-    await update.message.reply_text(welcome, parse_mode="Markdown")
+    await update.message.reply_text(welcome)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -95,38 +96,40 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         update: Telegram update.
         context: Command context.
     """
-    help_text = """**How to use the bot:**
+    help_text = """How to use the bot:
 
-1️⃣ **Add a leaderboard** (admin only):
-   `/add_leaderboard <leaderboard_id> <session_cookie> [year]`
+1️⃣ Add a leaderboard (admin only):
+   /add_leaderboard <leaderboard_id> <session_cookie> [year]
 
    Example:
-   `/add_leaderboard 123456 session=abc123def456 2024`
+   /add_leaderboard 123456 abc123def456 2024
 
    Where:
-   - `leaderboard_id` is your AoC private leaderboard ID
-   - `session_cookie` is your AoC session cookie (get it from browser DevTools)
-   - `year` is optional (defaults to current year)
+   - leaderboard_id is your AoC private leaderboard ID
+   - session_cookie is your AoC session cookie (get it from browser DevTools)
+   - year is optional (defaults to current year)
 
-2️⃣ **View leaderboards** (everyone):
-   `/list_leaderboards` - Show all configured leaderboards
+   Note: Each chat can only have one leaderboard. Adding a new one replaces the old one.
 
-3️⃣ **Check status** (everyone):
-   `/status` - Show monitoring status and next poll time
+2️⃣ View current rankings (everyone):
+   /rankings - Show rankings for your chat's leaderboard
 
-4️⃣ **Remove a leaderboard** (admin only):
-   `/remove_leaderboard <leaderboard_id> [year]`
+3️⃣ Check status (everyone):
+   /status - Show monitoring status and next poll time
 
-**Getting your session cookie:**
+4️⃣ Remove the leaderboard (admin only):
+   /remove_leaderboard - Stop monitoring this chat's leaderboard
+
+Getting your session cookie:
 1. Log into adventofcode.com in your browser
 2. Open DevTools (F12)
 3. Go to Application → Cookies → adventofcode.com
 4. Copy the value of the "session" cookie
 
-**More help:**
+More help:
 Use /start for a quick overview"""
 
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+    await update.message.reply_text(help_text)
 
 
 @admin_only
@@ -151,7 +154,7 @@ async def add_leaderboard_command(
     if not context.args or len(context.args) < 2:
         await update.message.reply_text(
             "Usage: /add_leaderboard <leaderboard_id> <session_cookie> [year]\n\n"
-            "Example: /add_leaderboard 123456 session=abc123 2024"
+            "Example: /add_leaderboard 123456 abc123def456 2024"
         )
         return
 
@@ -165,9 +168,9 @@ async def add_leaderboard_command(
         await update.message.reply_text("❌ Leaderboard ID must be numeric.")
         return
 
+    # Automatically add session= prefix if not present
     if not session_cookie.startswith("session="):
-        await update.message.reply_text("❌ Session cookie should start with 'session='")
-        return
+        session_cookie = f"session={session_cookie}"
 
     if year < 2015 or year > datetime.now().year:
         await update.message.reply_text(
@@ -175,13 +178,13 @@ async def add_leaderboard_command(
         )
         return
 
-    # Check if already exists
+    # Check if already exists (we'll update it if it does)
     try:
-        if await db.config_exists(chat_id, leaderboard_id, year):
+        existing = await db.get_config_for_chat(chat_id)
+        if existing:
             await update.message.reply_text(
-                f"❌ Leaderboard {leaderboard_id} ({year}) is already configured."
+                f"ℹ️ Replacing previous leaderboard configuration..."
             )
-            return
     except Exception as e:
         logger.error(f"Failed to check config existence: {e}")
         await update.message.reply_text("❌ Database error. Try again later.")
@@ -238,6 +241,20 @@ async def add_leaderboard_command(
         "Use /status to see monitoring details."
     )
 
+    # Fetch and post current rankings
+    try:
+        leaderboard_client = AoCAPIClient(session_cookie, year, leaderboard_id)
+        leaderboard_data = await asyncio.to_thread(
+            leaderboard_client.fetch_leaderboard
+        )
+        ranking_messages = MessageFormatter.format_leaderboard(leaderboard_data, year)
+        for message in ranking_messages:
+            await update.message.reply_text(message)
+    except Exception as e:
+        logger.warning(f"Failed to fetch initial rankings: {e}")
+        # Don't fail the entire command if we can't fetch rankings
+        pass
+
 
 @admin_only
 async def remove_leaderboard_command(
@@ -257,29 +274,14 @@ async def remove_leaderboard_command(
         await update.message.reply_text("❌ Bot not fully initialized. Try again later.")
         return
 
-    # Parse arguments
-    if not context.args or len(context.args) < 1:
-        await update.message.reply_text(
-            "Usage: /remove_leaderboard <leaderboard_id> [year]\n\n"
-            "Example: /remove_leaderboard 123456 2024"
-        )
-        return
-
-    leaderboard_id = context.args[0]
-    year = int(context.args[1]) if len(context.args) > 1 else datetime.now().year
     chat_id = str(update.effective_chat.id)
-
-    # Validate inputs
-    if not leaderboard_id.isdigit():
-        await update.message.reply_text("❌ Leaderboard ID must be numeric.")
-        return
 
     # Check if config exists
     try:
-        config = await db.get_config(chat_id, leaderboard_id, year)
+        config = await db.get_config_for_chat(chat_id)
         if not config:
             await update.message.reply_text(
-                f"❌ Leaderboard {leaderboard_id} ({year}) not found."
+                "❌ No leaderboard configured for this chat."
             )
             return
     except Exception as e:
@@ -289,7 +291,9 @@ async def remove_leaderboard_command(
 
     # Stop monitoring
     try:
-        await polling_mgr.remove_leaderboard(chat_id, leaderboard_id, year)
+        await polling_mgr.remove_leaderboard(
+            chat_id, config.leaderboard_id, config.year
+        )
     except Exception as e:
         logger.error(f"Failed to stop monitoring: {e}")
         await update.message.reply_text("❌ Failed to stop monitoring. Try again later.")
@@ -297,15 +301,14 @@ async def remove_leaderboard_command(
 
     # Remove from database
     try:
-        await db.remove_config(chat_id, leaderboard_id, year)
+        await db.remove_config(chat_id)
     except Exception as e:
         logger.error(f"Failed to remove config: {e}")
         await update.message.reply_text("❌ Database error. Try again later.")
         return
 
     await update.message.reply_text(
-        f"✅ Leaderboard {leaderboard_id} ({year}) removed.\n"
-        "Monitoring stopped."
+        "✅ Leaderboard removed.\nMonitoring stopped."
     )
 
 
@@ -420,6 +423,58 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+async def rankings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /rankings command (no parameters needed).
+
+    Args:
+        update: Telegram update.
+        context: Command context.
+    """
+    # Get database from context
+    db: DatabaseManager = context.bot_data.get("database")
+
+    if not db:
+        await update.message.reply_text("❌ Bot not fully initialized. Try again later.")
+        return
+
+    chat_id = str(update.effective_chat.id)
+
+    # Check if config exists for this chat
+    try:
+        config = await db.get_config_for_chat(chat_id)
+        if not config:
+            await update.message.reply_text(
+                "❌ No leaderboard configured for this chat.\n"
+                "Use /add_leaderboard to add one."
+            )
+            return
+    except Exception as e:
+        logger.error(f"Failed to get config: {e}")
+        await update.message.reply_text("❌ Database error. Try again later.")
+        return
+
+    # Fetch and display rankings
+    try:
+        await update.message.reply_text("⏳ Fetching leaderboard rankings...")
+        leaderboard_client = AoCAPIClient(
+            config.session_cookie, config.year, config.leaderboard_id
+        )
+        leaderboard_data = await asyncio.to_thread(
+            leaderboard_client.fetch_leaderboard
+        )
+        ranking_messages = MessageFormatter.format_leaderboard(
+            leaderboard_data, config.year
+        )
+        for message in ranking_messages:
+            await update.message.reply_text(message)
+    except AoCAPIError as e:
+        logger.warning(f"Failed to fetch rankings: {e}")
+        await update.message.reply_text(f"❌ Failed to fetch rankings:\n{e}")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching rankings: {e}")
+        await update.message.reply_text("❌ Failed to fetch rankings. Try again later.")
+
+
 def register_handlers(
     application, db_manager: DatabaseManager, polling_manager: PollingManager
 ) -> None:
@@ -447,5 +502,6 @@ def register_handlers(
         CommandHandler("list_leaderboards", list_leaderboards_command)
     )
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("rankings", rankings_command))
 
     logger.info("Command handlers registered")

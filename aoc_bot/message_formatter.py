@@ -1,7 +1,7 @@
 """Message formatting for Telegram notifications."""
 
 import logging
-from typing import List
+from typing import Any, Dict, List
 
 from aoc_bot.change_detector import (
     LeaderboardChanges,
@@ -147,3 +147,50 @@ class MessageFormatter:
             messages.append(current_message)
 
         return messages
+
+    @staticmethod
+    def format_leaderboard(leaderboard_data: Dict[str, Any], year: int) -> List[str]:
+        """Format current leaderboard rankings into messages.
+
+        Args:
+            leaderboard_data: Leaderboard JSON data from AoC API.
+            year: The year of the event.
+
+        Returns:
+            List of formatted message strings.
+        """
+        lines: List[str] = []
+        lines.append(f"🏆 Leaderboard Rankings ({year})")
+        lines.append("")
+
+        # Extract and sort members by local score
+        members = leaderboard_data.get("members", {})
+        if not members:
+            lines.append("No members on this leaderboard yet.")
+            return lines
+
+        # Convert to list and sort by local_score (descending)
+        member_list = []
+        for member_id, member_data in members.items():
+            member_list.append({
+                "name": member_data.get("name", "Anonymous"),
+                "score": member_data.get("local_score", 0),
+                "stars": member_data.get("stars", 0),
+            })
+
+        member_list.sort(key=lambda m: (m["score"], m["stars"]), reverse=True)
+
+        # Format rankings
+        for rank, member in enumerate(member_list, 1):
+            name = member["name"]
+            score = member["score"]
+            stars = member["stars"]
+            lines.append(f"{rank}. {name}: {score} points ({stars}⭐)")
+
+        # Combine lines and split if necessary
+        full_message = "\n".join(lines).strip()
+
+        if len(full_message) <= MESSAGE_LIMIT:
+            return [full_message]
+        else:
+            return MessageFormatter._split_long_message(full_message)
