@@ -1,18 +1,23 @@
 FROM python:3.13-slim
 
-# Install curl and other dependencies needed for uv installation
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# Install curl and build dependencies for Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv package manager
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
+ENV PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml pyproject.toml
+COPY uv.lock uv.lock
+COPY README.md README.md
 COPY aoc_bot/ aoc_bot/
 
 # Install dependencies using uv
@@ -22,4 +27,4 @@ RUN uv sync --frozen
 RUN mkdir -p data logs
 
 # Run the bot
-CMD ["/root/.cargo/bin/uv", "run", "python", "-m", "aoc_bot.main"]
+CMD ["/root/.local/bin/uv", "run", "python", "-m", "aoc_bot.main"]
