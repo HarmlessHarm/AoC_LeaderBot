@@ -18,20 +18,27 @@ A powerful Telegram bot that monitors multiple Advent of Code private leaderboar
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- pip package manager
+- Python 3.13 or higher
+- [uv](https://github.com/astral-sh/uv) package manager
 
 ### Setup
 
-1. Clone or download this repository:
+1. Install uv (if not already installed):
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Clone or download this repository:
 ```bash
 cd /home/harm/projects/AoC_Telegram_Bot
 ```
 
-2. Install dependencies:
+3. Install dependencies:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
+
+This will create a virtual environment and install all dependencies automatically.
 
 ## Quick Start
 
@@ -43,14 +50,32 @@ pip install -r requirements.txt
 
 ### Start the Bot
 
+**Option 1: Using .env file (recommended)**
+
+1. Copy the example environment file:
 ```bash
-python -m aoc_bot.main --bot-token "YOUR_BOT_TOKEN"
+cp .env.example .env
 ```
 
-Or use environment variable:
+2. Edit `.env` and add your bot token:
+```bash
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+```
+
+3. Run the bot:
+```bash
+uv run python -m aoc_bot.main
+```
+
+**Option 2: Command line argument**
+```bash
+uv run python -m aoc_bot.main --bot-token "YOUR_BOT_TOKEN"
+```
+
+**Option 3: Environment variable**
 ```bash
 export TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
-python -m aoc_bot.main
+uv run python -m aoc_bot.main
 ```
 
 ### Configure in Telegram
@@ -110,7 +135,7 @@ Your session cookie looks like: `session=abc123def456xyz789...`
 ### Bot Startup Arguments
 
 ```bash
-python -m aoc_bot.main [OPTIONS]
+uv run python -m aoc_bot.main [OPTIONS]
 ```
 
 **Options:**
@@ -136,11 +161,16 @@ When adding a leaderboard with `/add_leaderboard`, you can configure:
 
 ## Usage Examples
 
-### Example 1: Start the bot
+### Example 1: Start the bot with .env file
 
+1. Create `.env` file:
 ```bash
-export TELEGRAM_BOT_TOKEN="123456789:ABCdefGHIjklmnoPQRstuvWXYZ_1234567890"
-python -m aoc_bot.main
+echo "TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklmnoPQRstuvWXYZ_1234567890" > .env
+```
+
+2. Start the bot:
+```bash
+uv run python -m aoc_bot.main
 ```
 
 ### Example 2: Monitor your team's leaderboard
@@ -259,8 +289,11 @@ The bot is designed to be robust:
 
 1. **Admin-Only Commands**: Only Telegram chat administrators can add/remove leaderboards
 2. **Session Cookies**: Stored in SQLite database - keep your database file secure!
-3. **No Rate Limiting**: Bot commands aren't rate-limited yet (coming soon)
-4. **Error Messages**: Sensitive information is logged but not shown to users
+3. **Environment File**: The `.env` file contains your bot token - never commit it to git! (Already in .gitignore)
+4. **No Rate Limiting**: Bot commands aren't rate-limited yet (coming soon)
+5. **Error Messages**: Sensitive information is logged but not shown to users
+
+**⚠️ Important:** Never commit your `.env` file or share your bot token publicly!
 
 ## Troubleshooting
 
@@ -268,7 +301,7 @@ The bot is designed to be robust:
 
 Check that the bot token is valid:
 ```bash
-python -m aoc_bot.main --bot-token "bad_token"
+uv run python -m aoc_bot.main --bot-token "bad_token"
 ```
 
 Look for clear error messages about the token format.
@@ -324,18 +357,24 @@ If you were using the original single-chat version, here's how to migrate:
 
 ## Development
 
+### Install Development Dependencies
+
+```bash
+uv sync --all-extras
+```
+
 ### Running Tests
 
 ```bash
-pytest tests/
+uv run pytest tests/
 ```
 
 ### Code Quality
 
 ```bash
-black aoc_bot/
-flake8 aoc_bot/
-mypy aoc_bot/
+uv run black aoc_bot/
+uv run flake8 aoc_bot/
+uv run mypy aoc_bot/
 ```
 
 ## Future Features
