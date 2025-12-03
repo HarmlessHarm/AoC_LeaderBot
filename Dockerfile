@@ -5,8 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
     python3-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean
 
 # Install uv package manager
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
