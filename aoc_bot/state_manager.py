@@ -57,7 +57,7 @@ class ProcessedLeaderboard:
 
     timestamp: float
     members: Dict[str, MemberState] = field(default_factory=dict)
-    rankings: List[Tuple[str, int]] = field(default_factory=list)
+    rankings: Dict[int, List[str]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -67,19 +67,26 @@ class ProcessedLeaderboard:
                 member_id: member.to_dict()
                 for member_id, member in self.members.items()
             },
-            "rankings": self.rankings,
+            "rankings": {
+                str(rank): member_ids
+                for rank, member_ids in self.rankings.items()
+            },
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ProcessedLeaderboard":
         """Create from dictionary (loaded from JSON)."""
+        rankings_data = data.get("rankings", {})
+        # Convert string keys back to integers
+        rankings = {int(rank): member_ids for rank, member_ids in rankings_data.items()}
+
         return cls(
             timestamp=data["timestamp"],
             members={
                 member_id: MemberState.from_dict(member_data)
                 for member_id, member_data in data.get("members", {}).items()
             },
-            rankings=[(member_id, rank) for member_id, rank in data.get("rankings", [])],
+            rankings=rankings,
         )
 
 
@@ -172,14 +179,32 @@ class StateManager:
 
         # Sort by score (descending) to get rankings
         member_scores.sort(key=lambda x: x[1], reverse=True)
-        rankings = member_scores
 
-        # Assign rank to each member
-        for rank, (member_id, _) in enumerate(rankings, 1):
-            members[member_id].rank = rank
+        # Build rankings dict with proper tie handling
+        rankings: Dict[int, List[str]] = {}
+        current_rank = 1
+
+        # Group members by score (handle ties)
+        score_groups: Dict[int, List[str]] = {}
+        for member_id, score in member_scores:
+            if score not in score_groups:
+                score_groups[score] = []
+            score_groups[score].append(member_id)
+
+        # Assign ranks and build rankings dict
+        for score in sorted(score_groups.keys(), reverse=True):
+            member_ids = score_groups[score]
+            rankings[current_rank] = member_ids
+
+            # Assign rank to each member in this score group
+            for member_id in member_ids:
+                members[member_id].rank = current_rank
+
+            # Next rank accounts for how many people tied
+            current_rank += len(member_ids)
 
         return ProcessedLeaderboard(
             timestamp=time.time(),
             members=members,
-            rankings=[(member_id, score) for member_id, score in rankings],
+            rankings=rankings,
         )
